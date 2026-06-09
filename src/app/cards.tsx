@@ -20,6 +20,8 @@ export default function CardsScreen() {
   const [annualFee, setAnnualFee] = useState("");
   const [cards, setCards] = useState<Card[]>([]);
 
+  const [editingCardId, setEditingCardId] = useState<number | null>(null);
+
   async function loadCards() {
     const { data, error } = await supabase
       .from("credit_cards")
@@ -32,6 +34,16 @@ export default function CardsScreen() {
     }
 
     setCards(data || []);
+  }
+
+  function resetForm() {
+    setCardName("");
+    setLastFour("");
+    setBankName("");
+    setDueDay("");
+    setCreditLimit("");
+    setAnnualFee("");
+    setEditingCardId(null);
   }
 
   async function addCard() {
@@ -54,13 +66,46 @@ export default function CardsScreen() {
       return;
     }
 
-    setCardName("");
-    setLastFour("");
-    setBankName("");
-    setDueDay("");
-    setCreditLimit("");
-    setAnnualFee("");
+    resetForm();
+    loadCards();
+  }
 
+  function startEdit(card: Card) {
+    setEditingCardId(card.id);
+    setCardName(card.card_name || "");
+    setLastFour(card.last_four || "");
+    setBankName(card.bank_name || "");
+    setDueDay(card.due_day ? String(card.due_day) : "");
+    setCreditLimit(card.credit_limit ? String(card.credit_limit) : "");
+    setAnnualFee(card.annual_fee ? String(card.annual_fee) : "");
+  }
+
+  async function updateCard() {
+    if (!editingCardId) return;
+
+    if (!cardName || !lastFour) {
+      alert("Please enter card name and last 4 digits");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("credit_cards")
+      .update({
+        card_name: cardName.trim(),
+        last_four: lastFour.trim(),
+        bank_name: bankName.trim(),
+        due_day: dueDay ? Number(dueDay) : null,
+        credit_limit: creditLimit ? Number(creditLimit) : null,
+        annual_fee: annualFee ? Number(annualFee) : 0,
+      })
+      .eq("id", editingCardId);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    resetForm();
     loadCards();
   }
 
@@ -91,7 +136,9 @@ export default function CardsScreen() {
       </section>
 
       <section style={panelStyle}>
-        <h2 style={sectionTitleStyle}>Add Credit Card</h2>
+        <h2 style={sectionTitleStyle}>
+          {editingCardId ? "Edit Credit Card" : "Add Credit Card"}
+        </h2>
 
         <div style={formGridStyle}>
           <input
@@ -131,7 +178,18 @@ export default function CardsScreen() {
           />
         </div>
 
-        <button onClick={addCard}>Add Card</button>
+        <div style={buttonRowStyle}>
+          {editingCardId ? (
+            <>
+              <button onClick={updateCard}>Update Card</button>
+              <button className="secondary-button" onClick={resetForm}>
+                Cancel Edit
+              </button>
+            </>
+          ) : (
+            <button onClick={addCard}>Add Card</button>
+          )}
+        </div>
       </section>
 
       <section style={sectionStyle}>
@@ -174,7 +232,21 @@ export default function CardsScreen() {
                 </div>
               </div>
 
-              <button onClick={() => deleteCard(card.id)}>Delete Card</button>
+              <div style={buttonRowStyle}>
+                <button
+                  className="secondary-button"
+                  onClick={() => startEdit(card)}
+                >
+                  Edit Card
+                </button>
+
+                <button
+                  className="delete-button"
+                  onClick={() => deleteCard(card.id)}
+                >
+                  Delete Card
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -297,6 +369,12 @@ const detailValueStyle = {
   margin: "6px 0 0",
   fontSize: 17,
   fontWeight: 800,
+};
+
+const buttonRowStyle = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap" as const,
 };
 
 const emptyStateStyle = {

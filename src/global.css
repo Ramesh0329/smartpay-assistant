@@ -86,3 +86,18 @@ button:active {
 .delete-button:hover {
   background: #ef4444;
 }
+.secondary-button {
+  background: #000000;
+}
+
+.secondary-button:hover {
+  background: #4b453d;
+}
+
+.delete-button {
+  background: #000000;
+}
+
+.delete-button:hover {
+  background: #ef4444;
+}

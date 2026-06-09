@@ -17,6 +17,8 @@ export default function BillsScreen() {
   const [frequency, setFrequency] = useState("monthly");
   const [bills, setBills] = useState<Bill[]>([]);
 
+  const [editingBillId, setEditingBillId] = useState<number | null>(null);
+
   async function loadBills() {
     const { data, error } = await supabase
       .from("bills")
@@ -29,6 +31,14 @@ export default function BillsScreen() {
     }
 
     setBills(data || []);
+  }
+
+  function resetForm() {
+    setBillName("");
+    setAmount("");
+    setDueDate("");
+    setFrequency("monthly");
+    setEditingBillId(null);
   }
 
   async function addBill() {
@@ -49,11 +59,42 @@ export default function BillsScreen() {
       return;
     }
 
-    setBillName("");
-    setAmount("");
-    setDueDate("");
-    setFrequency("monthly");
+    resetForm();
+    loadBills();
+  }
 
+  function startEdit(bill: Bill) {
+    setEditingBillId(bill.id);
+    setBillName(bill.bill_name || "");
+    setAmount(bill.amount ? String(bill.amount) : "");
+    setDueDate(bill.due_date || "");
+    setFrequency(bill.frequency || "monthly");
+  }
+
+  async function updateBill() {
+    if (!editingBillId) return;
+
+    if (!billName || !dueDate) {
+      alert("Please enter bill name and due date");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("bills")
+      .update({
+        bill_name: billName.trim(),
+        amount: amount ? Number(amount) : null,
+        due_date: dueDate,
+        frequency,
+      })
+      .eq("id", editingBillId);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    resetForm();
     loadBills();
   }
 
@@ -63,6 +104,10 @@ export default function BillsScreen() {
     if (error) {
       alert(error.message);
       return;
+    }
+
+    if (editingBillId === id) {
+      resetForm();
     }
 
     loadBills();
@@ -98,7 +143,9 @@ export default function BillsScreen() {
       </section>
 
       <section style={panelStyle}>
-        <h2 style={sectionTitleStyle}>Add Bill</h2>
+        <h2 style={sectionTitleStyle}>
+          {editingBillId ? "Edit Bill" : "Add Bill"}
+        </h2>
 
         <div style={formGridStyle}>
           <input
@@ -130,7 +177,18 @@ export default function BillsScreen() {
           </select>
         </div>
 
-        <button onClick={addBill}>Add Bill</button>
+        <div style={buttonRowStyle}>
+          {editingBillId ? (
+            <>
+              <button onClick={updateBill}>Update Bill</button>
+              <button className="secondary-button" onClick={resetForm}>
+                Cancel Edit
+              </button>
+            </>
+          ) : (
+            <button onClick={addBill}>Add Bill</button>
+          )}
+        </div>
       </section>
 
       <section style={sectionStyle}>
@@ -176,6 +234,13 @@ export default function BillsScreen() {
               <div style={buttonRowStyle}>
                 <button onClick={() => togglePaid(bill)}>
                   Mark {bill.is_paid ? "Unpaid" : "Paid"}
+                </button>
+
+                <button
+                  className="secondary-button"
+                  onClick={() => startEdit(bill)}
+                >
+                  Edit Bill
                 </button>
 
                 <button
