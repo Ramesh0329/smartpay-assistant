@@ -2,5 +2,87 @@ html,
 body,
 #root {
   min-height: 100%;
+  margin: 0;
   overflow-y: auto;
+  background: #f6f4f1;
+  color: #000000;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue",
+    Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: #000000;
+  text-decoration: none;
+}
+
+a:hover {
+  color: #f95c4b;
+}
+
+input,
+select,
+button {
+  font-family: inherit;
+}
+
+input,
+select {
+  width: 100%;
+  background: #ffffff;
+  color: #000000;
+  border: 1px solid #e4ded2;
+  border-radius: 16px;
+  padding: 12px 14px;
+  outline: none;
+}
+
+input:focus,
+select:focus {
+  border-color: #f95c4b;
+  box-shadow: 0 0 0 3px rgba(249, 92, 75, 0.18);
+}
+
+button {
+  background: #f95c4b;
+  color: #ffffff;
+  border: none;
+  border-radius: 22px;
+  padding: 14px 24px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 15px;
+  transition: all 0.25s ease;
+}
+
+button:hover {
+  background: #000000;
+  transform: translateY(-2px);
+}
+
+button:active {
+  transform: translateY(0px);
+}
+
+.nav-link {
+  color: #000000;
+  text-decoration: none;
+  font-weight: 700;
+  transition: all 0.25s ease;
+}
+
+.nav-link:hover {
+  color: #f95c4b;
+}
+
+.delete-button {
+  background: #000000;
+}
+
+.delete-button:hover {
+  background: #ef4444;
 }

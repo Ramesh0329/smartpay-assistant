@@ -24,7 +24,7 @@ type RewardRule = {
   reward_rate: number;
 };
 
-// Converts user-entered category aliases into standard reward categories.
+// Converts user-entered aliases into standard categories.
 // Example: "Lunch" or "McDonald" becomes "Dining".
 function normalizeCategory(input: string) {
   const value = input.toLowerCase().trim();
@@ -79,7 +79,7 @@ export default function TransactionsScreen() {
   const [transactionDate, setTransactionDate] = useState("");
   const [creditCardId, setCreditCardId] = useState("");
 
-  // Loads all saved cards so the user can select which card was used.
+  // Loads cards so the user can choose which card was used.
   async function loadCards() {
     const { data, error } = await supabase
       .from("credit_cards")
@@ -94,7 +94,7 @@ export default function TransactionsScreen() {
     setCards(data || []);
   }
 
-  // Loads transaction history from Supabase, newest transactions first.
+  // Loads saved transactions, newest first.
   async function loadTransactions() {
     const { data, error } = await supabase
       .from("transactions")
@@ -109,7 +109,7 @@ export default function TransactionsScreen() {
     setTransactions(data || []);
   }
 
-  // Adds a transaction and calculates the best card recommendation.
+  // Adds transaction and calculates best-card recommendation.
   async function addTransaction() {
     if (!merchantName || !amount || !category || !transactionDate) {
       alert("Please fill merchant, amount, category, and date");
@@ -126,8 +126,7 @@ export default function TransactionsScreen() {
     const normalizedCategory = normalizeCategory(category);
     const usedCardId = creditCardId ? Number(creditCardId) : null;
 
-    // Find reward rules for the normalized category.
-    // Example: "Lunch" becomes "Dining", then we search Dining rewards.
+    // Search reward rules using normalized category.
     const { data: rewardRules, error: rewardsError } = await supabase
       .from("card_rewards")
       .select("id, credit_card_id, category, reward_rate")
@@ -142,7 +141,6 @@ export default function TransactionsScreen() {
     let rewardGap: number | null = null;
 
     if (rewardRules && rewardRules.length > 0) {
-      // Sort reward rules from highest reward rate to lowest.
       const sortedRewards = [...(rewardRules as RewardRule[])].sort(
         (a, b) => Number(b.reward_rate) - Number(a.reward_rate),
       );
@@ -162,7 +160,7 @@ export default function TransactionsScreen() {
       const usedRate = usedReward ? Number(usedReward.reward_rate) : 0;
       const bestRate = Number(bestReward.reward_rate);
 
-      // Reward gap means how many rewards the user missed by not using the best card.
+      // Reward gap = missed rewards compared to the best available card.
       rewardGap = Math.max(0, (bestRate - usedRate) * amountNumber);
     }
 
@@ -190,7 +188,6 @@ export default function TransactionsScreen() {
     await loadTransactions();
   }
 
-  // Deletes a transaction and reloads the list.
   async function deleteTransaction(id: number) {
     const { error } = await supabase.from("transactions").delete().eq("id", id);
 
@@ -202,118 +199,276 @@ export default function TransactionsScreen() {
     await loadTransactions();
   }
 
-  // Runs once when the page opens.
   useEffect(() => {
     loadCards();
     loadTransactions();
   }, []);
 
   return (
-    <main style={{ padding: 24, maxWidth: 900 }}>
-      <h1>Transactions</h1>
+    <main style={pageStyle}>
+      <section style={heroStyle}>
+        <p style={eyebrowStyle}>SmartPay Assistant</p>
+        <h1 style={titleStyle}>Transactions</h1>
+        <p style={subtitleStyle}>
+          Track spending, identify the best card for each purchase, and measure
+          missed reward opportunities.
+        </p>
+      </section>
 
-      <input
-        placeholder="Merchant Name, example: Chipotle"
-        value={merchantName}
-        onChange={(e) => setMerchantName(e.target.value)}
-        style={inputStyle}
-      />
+      <section style={panelStyle}>
+        <h2 style={sectionTitleStyle}>Add Transaction</h2>
 
-      <input
-        placeholder="Amount, example: 22.50"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        style={inputStyle}
-      />
+        <div style={formGridStyle}>
+          <input
+            placeholder="Merchant Name, example: Chipotle"
+            value={merchantName}
+            onChange={(e) => setMerchantName(e.target.value)}
+          />
 
-      <input
-        placeholder="Category, example: Lunch"
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-        style={inputStyle}
-      />
+          <input
+            placeholder="Amount, example: 22.50"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
 
-      <input
-        type="date"
-        value={transactionDate}
-        onChange={(e) => setTransactionDate(e.target.value)}
-        style={inputStyle}
-      />
+          <input
+            placeholder="Category, example: Lunch"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          />
 
-      <select
-        value={creditCardId}
-        onChange={(e) => setCreditCardId(e.target.value)}
-        style={inputStyle}
-      >
-        <option value="">Select Card Used</option>
-        {cards.map((card) => (
-          <option key={card.id} value={String(card.id)}>
-            {card.card_name}
-          </option>
-        ))}
-      </select>
+          <input
+            type="date"
+            value={transactionDate}
+            onChange={(e) => setTransactionDate(e.target.value)}
+          />
 
-      <button
-        onClick={addTransaction}
-        style={{ padding: 10, marginBottom: 30 }}
-      >
-        Add Transaction
-      </button>
+          <select
+            value={creditCardId}
+            onChange={(e) => setCreditCardId(e.target.value)}
+          >
+            <option value="">Select Card Used</option>
+            {cards.map((card) => (
+              <option key={card.id} value={String(card.id)}>
+                {card.card_name}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      <h2>Transaction History</h2>
+        <button onClick={addTransaction}>Add Transaction</button>
+      </section>
 
-      {transactions.map((transaction) => {
-        const card = cards.find(
-          (c) => Number(c.id) === Number(transaction.credit_card_id),
-        );
+      <section style={sectionStyle}>
+        <h2 style={sectionTitleStyle}>Transaction History</h2>
 
-        return (
-          <div key={transaction.id} style={cardStyle}>
-            <strong>{transaction.merchant_name}</strong>
-            <br />
-            Amount: ${transaction.amount}
-            <br />
-            Category: {transaction.category}
-            <br />
-            Date: {transaction.transaction_date}
-            <br />
-            Card Used: {card?.card_name || "N/A"}
-            <br />
-            Recommended Card: {transaction.recommended_card || "N/A"}
-            <br />
-            Reward Gap: {transaction.reward_gap || 0}
-            <br />
-            <br />
-            <button
-              onClick={() => deleteTransaction(transaction.id)}
-              style={deleteButtonStyle}
-            >
-              Delete
-            </button>
-          </div>
-        );
-      })}
+        {transactions.length === 0 && (
+          <div style={emptyStateStyle}>No transactions added yet.</div>
+        )}
+
+        <div style={transactionsGridStyle}>
+          {transactions.map((transaction) => {
+            const card = cards.find(
+              (c) => Number(c.id) === Number(transaction.credit_card_id),
+            );
+
+            const isMissedReward = Number(transaction.reward_gap || 0) > 0;
+
+            return (
+              <div key={transaction.id} style={transactionCardStyle}>
+                <div style={transactionHeaderStyle}>
+                  <div>
+                    <p style={cardLabelStyle}>{transaction.category}</p>
+                    <h3 style={merchantStyle}>{transaction.merchant_name}</h3>
+                  </div>
+
+                  <div style={amountBadgeStyle}>
+                    ${Number(transaction.amount || 0).toFixed(2)}
+                  </div>
+                </div>
+
+                <div style={detailsGridStyle}>
+                  <div>
+                    <p style={detailLabelStyle}>Date</p>
+                    <p style={detailValueStyle}>
+                      {transaction.transaction_date}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p style={detailLabelStyle}>Card Used</p>
+                    <p style={detailValueStyle}>{card?.card_name || "N/A"}</p>
+                  </div>
+
+                  <div>
+                    <p style={detailLabelStyle}>Recommended</p>
+                    <p style={detailValueStyle}>
+                      {transaction.recommended_card || "N/A"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p style={detailLabelStyle}>Reward Gap</p>
+                    <p
+                      style={{
+                        ...detailValueStyle,
+                        color: isMissedReward ? "#F95C4B" : "#000000",
+                      }}
+                    >
+                      {Number(transaction.reward_gap || 0).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                {isMissedReward && (
+                  <div style={warningBoxStyle}>
+                    Better card available: {transaction.recommended_card}
+                  </div>
+                )}
+
+                <button
+                  className="delete-button"
+                  onClick={() => deleteTransaction(transaction.id)}
+                >
+                  Delete Transaction
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </main>
   );
 }
 
-const inputStyle = {
-  width: "100%",
-  padding: 10,
-  marginBottom: 10,
+const pageStyle = {
+  padding: 40,
+  maxWidth: 1200,
+  minHeight: "100vh",
+  background: "#F6F4F1",
+  color: "#000000",
 };
 
-const cardStyle = {
-  border: "1px solid #ddd",
-  padding: 15,
-  marginBottom: 10,
-  borderRadius: 8,
+const heroStyle = {
+  marginBottom: 28,
 };
 
-const deleteButtonStyle = {
-  backgroundColor: "#ff4d4f",
-  color: "white",
-  border: "none",
-  padding: "8px 12px",
-  cursor: "pointer",
+const eyebrowStyle = {
+  color: "#F95C4B",
+  fontWeight: 700,
+  marginBottom: 8,
+};
+
+const titleStyle = {
+  fontSize: 48,
+  lineHeight: 1,
+  margin: 0,
+  letterSpacing: "-1.5px",
+};
+
+const subtitleStyle = {
+  fontSize: 18,
+  color: "#4b453d",
+  maxWidth: 680,
+};
+
+const panelStyle = {
+  background: "#E4DED2",
+  borderRadius: 32,
+  padding: 28,
+  boxShadow: "0 12px 30px rgba(0,0,0,.08)",
+  marginBottom: 34,
+};
+
+const sectionStyle = {
+  marginTop: 34,
+};
+
+const sectionTitleStyle = {
+  fontSize: 28,
+  marginBottom: 18,
+};
+
+const formGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 14,
+  marginBottom: 20,
+};
+
+const transactionsGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+  gap: 20,
+};
+
+const transactionCardStyle = {
+  background: "#E4DED2",
+  border: "1px solid rgba(0,0,0,.05)",
+  borderRadius: 32,
+  padding: 26,
+  boxShadow: "0 12px 30px rgba(0,0,0,.08)",
+};
+
+const transactionHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+  marginBottom: 24,
+};
+
+const cardLabelStyle = {
+  margin: 0,
+  color: "#F95C4B",
+  fontWeight: 700,
+};
+
+const merchantStyle = {
+  margin: "6px 0 0",
+  fontSize: 26,
+};
+
+const amountBadgeStyle = {
+  background: "#000000",
+  color: "#ffffff",
+  borderRadius: 999,
+  padding: "10px 16px",
+  height: "fit-content",
+  fontWeight: 800,
+};
+
+const detailsGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: 14,
+  marginBottom: 20,
+};
+
+const detailLabelStyle = {
+  margin: 0,
+  fontSize: 13,
+  color: "#4b453d",
+  fontWeight: 700,
+};
+
+const detailValueStyle = {
+  margin: "6px 0 0",
+  fontSize: 16,
+  fontWeight: 800,
+};
+
+const warningBoxStyle = {
+  background: "#F95C4B",
+  color: "#ffffff",
+  borderRadius: 18,
+  padding: 14,
+  fontWeight: 800,
+  marginBottom: 18,
+};
+
+const emptyStateStyle = {
+  background: "#E4DED2",
+  borderRadius: 24,
+  padding: 22,
+  color: "#4b453d",
 };
