@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Card = {
   id: number;
@@ -60,6 +60,7 @@ export default function CardsScreen() {
     setDueDay("");
     setCreditLimit("");
     setAnnualFee("");
+
     loadCards();
   }
 
@@ -74,6 +75,10 @@ export default function CardsScreen() {
     loadCards();
   }
 
+  useEffect(() => {
+    loadCards();
+  }, []);
+
   return (
     <main style={{ padding: 24, maxWidth: 800 }}>
       <h1>Add Credit Card</h1>
@@ -84,30 +89,35 @@ export default function CardsScreen() {
         onChange={(e) => setCardName(e.target.value)}
         style={inputStyle}
       />
+
       <input
         placeholder="Last 4 Digits"
         value={lastFour}
         onChange={(e) => setLastFour(e.target.value)}
         style={inputStyle}
       />
+
       <input
         placeholder="Bank Name"
         value={bankName}
         onChange={(e) => setBankName(e.target.value)}
         style={inputStyle}
       />
+
       <input
         placeholder="Due Day, example: 15"
         value={dueDay}
         onChange={(e) => setDueDay(e.target.value)}
         style={inputStyle}
       />
+
       <input
         placeholder="Credit Limit, example: 10000"
         value={creditLimit}
         onChange={(e) => setCreditLimit(e.target.value)}
         style={inputStyle}
       />
+
       <input
         placeholder="Annual Fee, example: 95"
         value={annualFee}

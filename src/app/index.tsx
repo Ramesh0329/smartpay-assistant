@@ -1,65 +1,123 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { supabase } from "@/lib/supabase";
+import { useEffect, useState } from "react";
 
-export default function HomeScreen() {
+type Card = {
+  id: number;
+  card_name: string;
+  credit_limit: number | null;
+  annual_fee: number | null;
+};
+
+type Bill = {
+  id: number;
+  bill_name: string;
+  amount: number | null;
+  due_date: string | null;
+  is_paid: boolean;
+};
+
+export default function DashboardScreen() {
+  const [cards, setCards] = useState<Card[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
+
+  async function loadDashboardData() {
+    const { data: cardsData } = await supabase
+      .from("credit_cards")
+      .select("id, card_name, credit_limit, annual_fee");
+
+    const { data: billsData } = await supabase
+      .from("bills")
+      .select("id, bill_name, amount, due_date, is_paid")
+      .order("due_date", { ascending: true })
+      .limit(5);
+
+    setCards(cardsData || []);
+    setBills(billsData || []);
+  }
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const totalCreditLimit = cards.reduce(
+    (sum, card) => sum + Number(card.credit_limit || 0),
+    0,
+  );
+
+  const totalAnnualFees = cards.reduce(
+    (sum, card) => sum + Number(card.annual_fee || 0),
+    0,
+  );
+
+  const unpaidBills = bills.filter((bill) => !bill.is_paid);
+
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.header}>SmartPay Assistant</Text>
+    <main style={{ padding: 24, maxWidth: 900 }}>
+      <h1>SmartPay Dashboard</h1>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Total Balance</Text>
-        <Text style={styles.amount}>$12,450.00</Text>
-      </View>
+      <div style={gridStyle}>
+        <div style={cardStyle}>
+          <h2>Total Cards</h2>
+          <p style={bigNumberStyle}>{cards.length}</p>
+        </div>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Upcoming Bills</Text>
-        <Text>Amex Gold - Jun 15</Text>
-        <Text>Chase Sapphire - Jun 20</Text>
-        <Text>Internet - Jun 25</Text>
-      </View>
+        <div style={cardStyle}>
+          <h2>Total Credit Limit</h2>
+          <p style={bigNumberStyle}>${totalCreditLimit}</p>
+        </div>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Monthly Spending</Text>
-        <Text>Food: $650</Text>
-        <Text>Travel: $300</Text>
-        <Text>Shopping: $450</Text>
-      </View>
+        <div style={cardStyle}>
+          <h2>Annual Fees</h2>
+          <p style={bigNumberStyle}>${totalAnnualFees}</p>
+        </div>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Recommended Card</Text>
-        <Text>For Dining → Use Amex Gold (4x Rewards)</Text>
-      </View>
-    </ScrollView>
+        <div style={cardStyle}>
+          <h2>Unpaid Bills</h2>
+          <p style={bigNumberStyle}>{unpaidBills.length}</p>
+        </div>
+      </div>
+
+      <section style={{ marginTop: 30 }}>
+        <h2>Upcoming Bills</h2>
+
+        {bills.length === 0 && <p>No bills added yet.</p>}
+
+        {bills.map((bill) => (
+          <div key={bill.id} style={billStyle}>
+            <strong>{bill.bill_name}</strong>
+            <br />
+            Amount: ${bill.amount || 0}
+            <br />
+            Due Date: {bill.due_date || "N/A"}
+            <br />
+            Status: {bill.is_paid ? "Paid" : "Unpaid"}
+          </div>
+        ))}
+      </section>
+    </main>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: "#F5F5F5",
-  },
-  header: {
-    fontSize: 32,
-    fontWeight: "bold",
-    marginTop: 30,
-    marginBottom: 20,
-  },
-  card: {
-    backgroundColor: "#FFFFFF",
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 15,
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 10,
-  },
-  amount: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "green",
-  },
-});
+const gridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(4, 1fr)",
+  gap: 16,
+};
+
+const cardStyle = {
+  border: "1px solid #ddd",
+  borderRadius: 8,
+  padding: 16,
+};
+
+const bigNumberStyle = {
+  fontSize: 28,
+  fontWeight: "bold",
+};
+
+const billStyle = {
+  border: "1px solid #ddd",
+  borderRadius: 8,
+  padding: 16,
+  marginBottom: 10,
+};
