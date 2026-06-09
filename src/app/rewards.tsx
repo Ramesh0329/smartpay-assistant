@@ -23,6 +23,8 @@ export default function RewardsScreen() {
   const [rewardRate, setRewardRate] = useState("");
   const [rewardType, setRewardType] = useState("points");
 
+  const [editingRewardId, setEditingRewardId] = useState<number | null>(null);
+
   async function loadCards() {
     const { data, error } = await supabase
       .from("credit_cards")
@@ -51,6 +53,14 @@ export default function RewardsScreen() {
     setRewards(data || []);
   }
 
+  function resetForm() {
+    setCreditCardId("");
+    setCategory("");
+    setRewardRate("");
+    setRewardType("points");
+    setEditingRewardId(null);
+  }
+
   async function addReward() {
     if (!creditCardId || !category || !rewardRate) {
       alert("Please select card, category, and reward rate");
@@ -69,10 +79,57 @@ export default function RewardsScreen() {
       return;
     }
 
-    setCreditCardId("");
-    setCategory("");
-    setRewardRate("");
-    setRewardType("points");
+    resetForm();
+    loadRewards();
+  }
+
+  function startEdit(reward: Reward) {
+    setEditingRewardId(reward.id);
+    setCreditCardId(String(reward.credit_card_id));
+    setCategory(reward.category || "");
+    setRewardRate(String(reward.reward_rate || ""));
+    setRewardType(reward.reward_type || "points");
+  }
+
+  async function updateReward() {
+    if (!editingRewardId) return;
+
+    if (!creditCardId || !category || !rewardRate) {
+      alert("Please select card, category, and reward rate");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("card_rewards")
+      .update({
+        credit_card_id: Number(creditCardId),
+        category: category.trim(),
+        reward_rate: Number(rewardRate),
+        reward_type: rewardType,
+      })
+      .eq("id", editingRewardId);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    resetForm();
+    loadRewards();
+  }
+
+  async function deleteReward(id: number) {
+    const { error } = await supabase.from("card_rewards").delete().eq("id", id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    if (editingRewardId === id) {
+      resetForm();
+    }
+
     loadRewards();
   }
 
@@ -93,7 +150,9 @@ export default function RewardsScreen() {
       </section>
 
       <section style={panelStyle}>
-        <h2 style={sectionTitleStyle}>Add Reward Rule</h2>
+        <h2 style={sectionTitleStyle}>
+          {editingRewardId ? "Edit Reward Rule" : "Add Reward Rule"}
+        </h2>
 
         <div style={formGridStyle}>
           <select
@@ -129,7 +188,18 @@ export default function RewardsScreen() {
           </select>
         </div>
 
-        <button onClick={addReward}>Add Reward Rule</button>
+        <div style={buttonRowStyle}>
+          {editingRewardId ? (
+            <>
+              <button onClick={updateReward}>Update Reward</button>
+              <button className="secondary-button" onClick={resetForm}>
+                Cancel Edit
+              </button>
+            </>
+          ) : (
+            <button onClick={addReward}>Add Reward Rule</button>
+          )}
+        </div>
       </section>
 
       <section style={sectionStyle}>
@@ -153,6 +223,22 @@ export default function RewardsScreen() {
 
                 <div style={rewardBadgeStyle}>
                   {reward.reward_rate} {reward.reward_type}
+                </div>
+
+                <div style={buttonRowStyle}>
+                  <button
+                    className="secondary-button"
+                    onClick={() => startEdit(reward)}
+                  >
+                    Edit Reward
+                  </button>
+
+                  <button
+                    className="delete-button"
+                    onClick={() => deleteReward(reward.id)}
+                  >
+                    Delete Reward
+                  </button>
                 </div>
               </div>
             );
@@ -245,11 +331,19 @@ const rewardCategoryStyle = {
 
 const rewardBadgeStyle = {
   display: "inline-block",
-  background: "#000000",
+  background: "#F95C4B",
   color: "#ffffff",
   borderRadius: 999,
-  padding: "10px 16px",
+  padding: "10px 18px",
   fontWeight: 800,
+  fontSize: 16,
+  marginBottom: 22,
+};
+
+const buttonRowStyle = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap" as const,
 };
 
 const emptyStateStyle = {
