@@ -27,6 +27,9 @@ export default function RootLayout() {
         <Link className="nav-link" href="/recommendations">
           Recommendations
         </Link>
+        <Link className="nav-link" href="/login">
+          Login
+        </Link>
       </nav>
 
       <Slot />

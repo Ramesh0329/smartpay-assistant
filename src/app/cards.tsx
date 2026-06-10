@@ -19,13 +19,36 @@ export default function CardsScreen() {
   const [creditLimit, setCreditLimit] = useState("");
   const [annualFee, setAnnualFee] = useState("");
   const [cards, setCards] = useState<Card[]>([]);
-
   const [editingCardId, setEditingCardId] = useState<number | null>(null);
 
+  // Professional pattern: always get the logged-in user before reading/writing user-specific data.
+  async function getCurrentUserId() {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) {
+      alert(error.message);
+      return null;
+    }
+
+    if (!user) {
+      alert("Please login first");
+      return null;
+    }
+
+    return user.id;
+  }
+
   async function loadCards() {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const { data, error } = await supabase
       .from("credit_cards")
       .select("*")
+      .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -52,7 +75,11 @@ export default function CardsScreen() {
       return;
     }
 
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const { error } = await supabase.from("credit_cards").insert({
+      user_id: userId,
       card_name: cardName.trim(),
       last_four: lastFour.trim(),
       bank_name: bankName.trim(),
@@ -88,6 +115,9 @@ export default function CardsScreen() {
       return;
     }
 
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const { error } = await supabase
       .from("credit_cards")
       .update({
@@ -98,7 +128,8 @@ export default function CardsScreen() {
         credit_limit: creditLimit ? Number(creditLimit) : null,
         annual_fee: annualFee ? Number(annualFee) : 0,
       })
-      .eq("id", editingCardId);
+      .eq("id", editingCardId)
+      .eq("user_id", userId);
 
     if (error) {
       alert(error.message);
@@ -110,7 +141,14 @@ export default function CardsScreen() {
   }
 
   async function deleteCard(id: number) {
-    const { error } = await supabase.from("credit_cards").delete().eq("id", id);
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const { error } = await supabase
+      .from("credit_cards")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
 
     if (error) {
       alert(error.message);
