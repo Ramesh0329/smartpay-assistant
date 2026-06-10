@@ -79,6 +79,10 @@ export default function TransactionsScreen() {
   const [transactionDate, setTransactionDate] = useState("");
   const [creditCardId, setCreditCardId] = useState("");
 
+  const [editingTransactionId, setEditingTransactionId] = useState<
+    number | null
+  >(null);
+
   // Loads cards so the user can choose which card was used.
   async function loadCards() {
     const { data, error } = await supabase
@@ -109,32 +113,30 @@ export default function TransactionsScreen() {
     setTransactions(data || []);
   }
 
-  // Adds transaction and calculates best-card recommendation.
-  async function addTransaction() {
-    if (!merchantName || !amount || !category || !transactionDate) {
-      alert("Please fill merchant, amount, category, and date");
-      return;
-    }
+  function resetForm() {
+    setMerchantName("");
+    setAmount("");
+    setCategory("");
+    setTransactionDate("");
+    setCreditCardId("");
+    setEditingTransactionId(null);
+  }
 
-    const amountNumber = Number(amount);
+  // Calculates the recommended card and reward gap using reward rules.
+  async function calculateRecommendation(
+    inputCategory: string,
+    inputAmount: number,
+    usedCardId: number | null,
+  ) {
+    const normalizedCategory = normalizeCategory(inputCategory);
 
-    if (Number.isNaN(amountNumber)) {
-      alert("Amount must be a valid number");
-      return;
-    }
-
-    const normalizedCategory = normalizeCategory(category);
-    const usedCardId = creditCardId ? Number(creditCardId) : null;
-
-    // Search reward rules using normalized category.
     const { data: rewardRules, error: rewardsError } = await supabase
       .from("card_rewards")
       .select("id, credit_card_id, category, reward_rate")
       .ilike("category", normalizedCategory);
 
     if (rewardsError) {
-      alert(rewardsError.message);
-      return;
+      throw new Error(rewardsError.message);
     }
 
     let recommendedCard: string | null = null;
@@ -160,32 +162,112 @@ export default function TransactionsScreen() {
       const usedRate = usedReward ? Number(usedReward.reward_rate) : 0;
       const bestRate = Number(bestReward.reward_rate);
 
-      // Reward gap = missed rewards compared to the best available card.
-      rewardGap = Math.max(0, (bestRate - usedRate) * amountNumber);
+      rewardGap = Math.max(0, (bestRate - usedRate) * inputAmount);
     }
 
-    const { error } = await supabase.from("transactions").insert({
-      merchant_name: merchantName.trim(),
-      amount: amountNumber,
-      category: normalizedCategory,
-      transaction_date: transactionDate,
-      credit_card_id: usedCardId,
-      recommended_card: recommendedCard,
-      reward_gap: rewardGap,
-    });
+    return {
+      normalizedCategory,
+      recommendedCard,
+      rewardGap,
+    };
+  }
 
-    if (error) {
-      alert(error.message);
+  async function addTransaction() {
+    if (!merchantName || !amount || !category || !transactionDate) {
+      alert("Please fill merchant, amount, category, and date");
       return;
     }
 
-    setMerchantName("");
-    setAmount("");
-    setCategory("");
-    setTransactionDate("");
-    setCreditCardId("");
+    const amountNumber = Number(amount);
 
-    await loadTransactions();
+    if (Number.isNaN(amountNumber)) {
+      alert("Amount must be a valid number");
+      return;
+    }
+
+    const usedCardId = creditCardId ? Number(creditCardId) : null;
+
+    try {
+      const { normalizedCategory, recommendedCard, rewardGap } =
+        await calculateRecommendation(category, amountNumber, usedCardId);
+
+      const { error } = await supabase.from("transactions").insert({
+        merchant_name: merchantName.trim(),
+        amount: amountNumber,
+        category: normalizedCategory,
+        transaction_date: transactionDate,
+        credit_card_id: usedCardId,
+        recommended_card: recommendedCard,
+        reward_gap: rewardGap,
+      });
+
+      if (error) {
+        alert(error.message);
+        return;
+      }
+
+      resetForm();
+      await loadTransactions();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Something went wrong");
+    }
+  }
+
+  function startEdit(transaction: Transaction) {
+    setEditingTransactionId(transaction.id);
+    setMerchantName(transaction.merchant_name || "");
+    setAmount(String(transaction.amount || ""));
+    setCategory(transaction.category || "");
+    setTransactionDate(transaction.transaction_date || "");
+    setCreditCardId(
+      transaction.credit_card_id ? String(transaction.credit_card_id) : "",
+    );
+  }
+
+  async function updateTransaction() {
+    if (!editingTransactionId) return;
+
+    if (!merchantName || !amount || !category || !transactionDate) {
+      alert("Please fill merchant, amount, category, and date");
+      return;
+    }
+
+    const amountNumber = Number(amount);
+
+    if (Number.isNaN(amountNumber)) {
+      alert("Amount must be a valid number");
+      return;
+    }
+
+    const usedCardId = creditCardId ? Number(creditCardId) : null;
+
+    try {
+      const { normalizedCategory, recommendedCard, rewardGap } =
+        await calculateRecommendation(category, amountNumber, usedCardId);
+
+      const { error } = await supabase
+        .from("transactions")
+        .update({
+          merchant_name: merchantName.trim(),
+          amount: amountNumber,
+          category: normalizedCategory,
+          transaction_date: transactionDate,
+          credit_card_id: usedCardId,
+          recommended_card: recommendedCard,
+          reward_gap: rewardGap,
+        })
+        .eq("id", editingTransactionId);
+
+      if (error) {
+        alert(error.message);
+        return;
+      }
+
+      resetForm();
+      await loadTransactions();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Something went wrong");
+    }
   }
 
   async function deleteTransaction(id: number) {
@@ -194,6 +276,10 @@ export default function TransactionsScreen() {
     if (error) {
       alert(error.message);
       return;
+    }
+
+    if (editingTransactionId === id) {
+      resetForm();
     }
 
     await loadTransactions();
@@ -216,7 +302,9 @@ export default function TransactionsScreen() {
       </section>
 
       <section style={panelStyle}>
-        <h2 style={sectionTitleStyle}>Add Transaction</h2>
+        <h2 style={sectionTitleStyle}>
+          {editingTransactionId ? "Edit Transaction" : "Add Transaction"}
+        </h2>
 
         <div style={formGridStyle}>
           <input
@@ -256,7 +344,18 @@ export default function TransactionsScreen() {
           </select>
         </div>
 
-        <button onClick={addTransaction}>Add Transaction</button>
+        <div style={buttonRowStyle}>
+          {editingTransactionId ? (
+            <>
+              <button onClick={updateTransaction}>Update Transaction</button>
+              <button className="secondary-button" onClick={resetForm}>
+                Cancel Edit
+              </button>
+            </>
+          ) : (
+            <button onClick={addTransaction}>Add Transaction</button>
+          )}
+        </div>
       </section>
 
       <section style={sectionStyle}>
@@ -326,12 +425,21 @@ export default function TransactionsScreen() {
                   </div>
                 )}
 
-                <button
-                  className="delete-button"
-                  onClick={() => deleteTransaction(transaction.id)}
-                >
-                  Delete Transaction
-                </button>
+                <div style={buttonRowStyle}>
+                  <button
+                    className="secondary-button"
+                    onClick={() => startEdit(transaction)}
+                  >
+                    Edit Transaction
+                  </button>
+
+                  <button
+                    className="delete-button"
+                    onClick={() => deleteTransaction(transaction.id)}
+                  >
+                    Delete Transaction
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -464,6 +572,12 @@ const warningBoxStyle = {
   padding: 14,
   fontWeight: 800,
   marginBottom: 18,
+};
+
+const buttonRowStyle = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap" as const,
 };
 
 const emptyStateStyle = {
