@@ -25,10 +25,33 @@ export default function RewardsScreen() {
 
   const [editingRewardId, setEditingRewardId] = useState<number | null>(null);
 
+  async function getCurrentUserId() {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) {
+      alert(error.message);
+      return null;
+    }
+
+    if (!user) {
+      alert("Please login first");
+      return null;
+    }
+
+    return user.id;
+  }
+
   async function loadCards() {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const { data, error } = await supabase
       .from("credit_cards")
       .select("id, card_name")
+      .eq("user_id", userId)
       .order("card_name");
 
     if (error) {
@@ -40,9 +63,13 @@ export default function RewardsScreen() {
   }
 
   async function loadRewards() {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const { data, error } = await supabase
       .from("card_rewards")
       .select("*")
+      .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -67,7 +94,11 @@ export default function RewardsScreen() {
       return;
     }
 
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const { error } = await supabase.from("card_rewards").insert({
+      user_id: userId,
       credit_card_id: Number(creditCardId),
       category: category.trim(),
       reward_rate: Number(rewardRate),
@@ -99,6 +130,9 @@ export default function RewardsScreen() {
       return;
     }
 
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const { error } = await supabase
       .from("card_rewards")
       .update({
@@ -107,7 +141,8 @@ export default function RewardsScreen() {
         reward_rate: Number(rewardRate),
         reward_type: rewardType,
       })
-      .eq("id", editingRewardId);
+      .eq("id", editingRewardId)
+      .eq("user_id", userId);
 
     if (error) {
       alert(error.message);
@@ -119,7 +154,14 @@ export default function RewardsScreen() {
   }
 
   async function deleteReward(id: number) {
-    const { error } = await supabase.from("card_rewards").delete().eq("id", id);
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const { error } = await supabase
+      .from("card_rewards")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
 
     if (error) {
       alert(error.message);

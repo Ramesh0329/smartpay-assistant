@@ -1,6 +1,16 @@
 import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import {
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 type Card = {
   id: number;
@@ -19,10 +29,12 @@ type Bill = {
 
 type Transaction = {
   id: number;
+  merchant_name: string;
   amount: number;
   category: string;
   reward_gap: number | null;
   transaction_date: string;
+  credit_card_id: number | null;
 };
 
 const CHART_COLORS = ["#F95C4B", "#000000", "#BFB8AA", "#D9D3C7", "#E4DED2"];
@@ -32,20 +44,47 @@ export default function DashboardScreen() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
+  async function getCurrentUserId() {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) {
+      alert(error.message);
+      return null;
+    }
+
+    if (!user) {
+      alert("Please login first");
+      return null;
+    }
+
+    return user.id;
+  }
+
   async function loadDashboardData() {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const { data: cardsData } = await supabase
       .from("credit_cards")
-      .select("id, card_name, credit_limit, annual_fee");
+      .select("id, card_name, credit_limit, annual_fee")
+      .eq("user_id", userId);
 
     const { data: billsData } = await supabase
       .from("bills")
       .select("id, bill_name, amount, due_date, is_paid")
+      .eq("user_id", userId)
       .order("due_date", { ascending: true })
       .limit(5);
 
     const { data: transactionsData } = await supabase
       .from("transactions")
-      .select("id, amount, category, reward_gap, transaction_date")
+      .select(
+        "id, merchant_name, amount, category, reward_gap, transaction_date, credit_card_id",
+      )
+      .eq("user_id", userId)
       .order("transaction_date", { ascending: false });
 
     setCards(cardsData || []);
@@ -93,6 +132,121 @@ export default function DashboardScreen() {
     value,
   }));
 
+  const largestCategory =
+    chartData.length > 0
+      ? chartData.reduce((a, b) => (a.value > b.value ? a : b))
+      : null;
+
+  const merchantSpend = transactions.reduce<Record<string, number>>(
+    (acc, transaction) => {
+      const merchant = transaction.merchant_name || "Unknown";
+      acc[merchant] = (acc[merchant] || 0) + Number(transaction.amount || 0);
+      return acc;
+    },
+    {},
+  );
+
+  const topMerchant =
+    Object.entries(merchantSpend).length > 0
+      ? Object.entries(merchantSpend).reduce((a, b) => (a[1] > b[1] ? a : b))
+      : null;
+
+  const today = new Date();
+
+  const billAlerts = bills.map((bill) => {
+    const dueDate = bill.due_date ? new Date(bill.due_date) : null;
+
+    if (bill.is_paid) {
+      return {
+        ...bill,
+        message: "Paid",
+        color: "#000000",
+      };
+    }
+
+    if (!dueDate) {
+      return {
+        ...bill,
+        message: "No due date",
+        color: "#BFB8AA",
+      };
+    }
+
+    const daysLeft = Math.ceil(
+      (dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    if (daysLeft < 0) {
+      return {
+        ...bill,
+        message: "Overdue",
+        color: "#F95C4B",
+      };
+    }
+
+    if (daysLeft <= 3) {
+      return {
+        ...bill,
+        message: `Due in ${daysLeft} days`,
+        color: "#F95C4B",
+      };
+    }
+
+    return {
+      ...bill,
+      message: `Due in ${daysLeft} days`,
+      color: "#000000",
+    };
+  });
+
+  const cardUsage = transactions.reduce<Record<number, number>>(
+    (acc, transaction) => {
+      const cardId = Number(transaction.credit_card_id);
+
+      if (!cardId) return acc;
+
+      acc[cardId] = (acc[cardId] || 0) + Number(transaction.amount || 0);
+
+      return acc;
+    },
+    {},
+  );
+
+  const leaderboard = cards
+    .map((card) => ({
+      card_name: card.card_name,
+      spend: cardUsage[card.id] || 0,
+    }))
+    .sort((a, b) => b.spend - a.spend);
+
+  const monthlySpendMap = transactions.reduce<Record<string, number>>(
+    (acc, transaction) => {
+      if (!transaction.transaction_date) return acc;
+
+      const date = new Date(transaction.transaction_date);
+      const month = date.toLocaleString("default", {
+        month: "short",
+        year: "numeric",
+      });
+
+      acc[month] = (acc[month] || 0) + Number(transaction.amount || 0);
+      return acc;
+    },
+    {},
+  );
+
+  const monthlySpendData = Object.entries(monthlySpendMap)
+    .map(([month, spend]) => ({
+      month,
+      spend,
+      sortDate: new Date(month),
+    }))
+    .sort((a, b) => a.sortDate.getTime() - b.sortDate.getTime())
+    .map(({ month, spend }) => ({
+      month,
+      spend,
+    }));
+
   return (
     <main style={pageStyle}>
       <section style={heroStyle}>
@@ -139,6 +293,64 @@ export default function DashboardScreen() {
           <p style={bigNumberStyle}>{totalMissedRewards.toFixed(2)}</p>
         </div>
       </div>
+
+      <section style={sectionStyle}>
+        <h2 style={sectionTitleStyle}>Smart Insights</h2>
+
+        <div style={gridStyle}>
+          <div style={cardStyle}>
+            <p style={labelStyle}>Missed Rewards</p>
+            <p style={bigNumberStyle}>${totalMissedRewards.toFixed(2)}</p>
+          </div>
+
+          <div style={cardStyle}>
+            <p style={labelStyle}>Largest Category</p>
+            <p style={bigNumberStyle}>{largestCategory?.name || "N/A"}</p>
+          </div>
+
+          <div style={cardStyle}>
+            <p style={labelStyle}>Top Merchant</p>
+            <p style={bigNumberStyle}>{topMerchant?.[0] || "N/A"}</p>
+          </div>
+
+          <div style={cardStyle}>
+            <p style={labelStyle}>Unpaid Bills</p>
+            <p style={bigNumberStyle}>{unpaidBills.length}</p>
+          </div>
+        </div>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={sectionTitleStyle}>Monthly Spending Trend</h2>
+
+        {monthlySpendData.length === 0 ? (
+          <div style={emptyStateStyle}>No monthly spending data yet.</div>
+        ) : (
+          <div style={chartWrapperStyle}>
+            <ResponsiveContainer>
+              <LineChart data={monthlySpendData}>
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip
+                  contentStyle={{
+                    background: "#F6F4F1",
+                    border: "1px solid #E4DED2",
+                    borderRadius: 16,
+                    color: "#000000",
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="spend"
+                  stroke="#F95C4B"
+                  strokeWidth={4}
+                  dot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
 
       <section style={sectionStyle}>
         <h2 style={sectionTitleStyle}>Spend by Category</h2>
@@ -209,6 +421,78 @@ export default function DashboardScreen() {
             Due Date: {bill.due_date || "N/A"}
             <br />
             Status: {bill.is_paid ? "Paid" : "Unpaid"}
+          </div>
+        ))}
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={sectionTitleStyle}>Recent Transactions</h2>
+
+        {transactions.length === 0 && (
+          <div style={emptyStateStyle}>No transactions added yet.</div>
+        )}
+
+        {transactions.slice(0, 5).map((transaction) => (
+          <div key={transaction.id} style={listCardStyle}>
+            <strong>{transaction.merchant_name}</strong>
+            <br />
+            Category: {transaction.category}
+            <br />
+            Amount: ${Number(transaction.amount || 0).toFixed(2)}
+            <br />
+            Date: {transaction.transaction_date}
+          </div>
+        ))}
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={sectionTitleStyle}>Bill Alerts</h2>
+
+        {billAlerts.length === 0 && (
+          <div style={emptyStateStyle}>No bill alerts yet.</div>
+        )}
+
+        {billAlerts.map((bill) => (
+          <div key={bill.id} style={listCardStyle}>
+            <strong>{bill.bill_name}</strong>
+            <br />
+            Amount: ${Number(bill.amount || 0).toFixed(2)}
+            <br />
+            <span
+              style={{
+                color: bill.color,
+                fontWeight: 800,
+              }}
+            >
+              {bill.message}
+            </span>
+          </div>
+        ))}
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={sectionTitleStyle}>Best Card Leaderboard</h2>
+
+        {leaderboard.length === 0 && (
+          <div style={emptyStateStyle}>No card activity yet.</div>
+        )}
+
+        {leaderboard.map((card, index) => (
+          <div key={card.card_name} style={listCardStyle}>
+            <strong>
+              #{index + 1} {card.card_name}
+            </strong>
+            <br />
+            Total Spend:
+            <span
+              style={{
+                color: "#F95C4B",
+                fontWeight: 800,
+              }}
+            >
+              {" "}
+              ${card.spend.toFixed(2)}
+            </span>
           </div>
         ))}
       </section>

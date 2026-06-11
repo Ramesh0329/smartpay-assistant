@@ -16,13 +16,35 @@ export default function BillsScreen() {
   const [dueDate, setDueDate] = useState("");
   const [frequency, setFrequency] = useState("monthly");
   const [bills, setBills] = useState<Bill[]>([]);
-
   const [editingBillId, setEditingBillId] = useState<number | null>(null);
 
+  async function getCurrentUserId() {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) {
+      alert(error.message);
+      return null;
+    }
+
+    if (!user) {
+      alert("Please login first");
+      return null;
+    }
+
+    return user.id;
+  }
+
   async function loadBills() {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const { data, error } = await supabase
       .from("bills")
       .select("*")
+      .eq("user_id", userId)
       .order("due_date", { ascending: true });
 
     if (error) {
@@ -47,7 +69,11 @@ export default function BillsScreen() {
       return;
     }
 
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const { error } = await supabase.from("bills").insert({
+      user_id: userId,
       bill_name: billName.trim(),
       amount: amount ? Number(amount) : null,
       due_date: dueDate,
@@ -79,6 +105,9 @@ export default function BillsScreen() {
       return;
     }
 
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const { error } = await supabase
       .from("bills")
       .update({
@@ -87,7 +116,8 @@ export default function BillsScreen() {
         due_date: dueDate,
         frequency,
       })
-      .eq("id", editingBillId);
+      .eq("id", editingBillId)
+      .eq("user_id", userId);
 
     if (error) {
       alert(error.message);
@@ -99,7 +129,14 @@ export default function BillsScreen() {
   }
 
   async function deleteBill(id: number) {
-    const { error } = await supabase.from("bills").delete().eq("id", id);
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const { error } = await supabase
+      .from("bills")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
 
     if (error) {
       alert(error.message);
@@ -114,10 +151,14 @@ export default function BillsScreen() {
   }
 
   async function togglePaid(bill: Bill) {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const { error } = await supabase
       .from("bills")
       .update({ is_paid: !bill.is_paid })
-      .eq("id", bill.id);
+      .eq("id", bill.id)
+      .eq("user_id", userId);
 
     if (error) {
       alert(error.message);

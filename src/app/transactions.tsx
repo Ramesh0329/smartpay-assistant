@@ -24,8 +24,6 @@ type RewardRule = {
   reward_rate: number;
 };
 
-// Converts user-entered aliases into standard categories.
-// Example: "Lunch" or "McDonald" becomes "Dining".
 function normalizeCategory(input: string) {
   const value = input.toLowerCase().trim();
 
@@ -83,11 +81,33 @@ export default function TransactionsScreen() {
     number | null
   >(null);
 
-  // Loads cards so the user can choose which card was used.
+  async function getCurrentUserId() {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) {
+      alert(error.message);
+      return null;
+    }
+
+    if (!user) {
+      alert("Please login first");
+      return null;
+    }
+
+    return user.id;
+  }
+
   async function loadCards() {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const { data, error } = await supabase
       .from("credit_cards")
       .select("id, card_name")
+      .eq("user_id", userId)
       .order("card_name", { ascending: true });
 
     if (error) {
@@ -98,11 +118,14 @@ export default function TransactionsScreen() {
     setCards(data || []);
   }
 
-  // Loads saved transactions, newest first.
   async function loadTransactions() {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const { data, error } = await supabase
       .from("transactions")
       .select("*")
+      .eq("user_id", userId)
       .order("transaction_date", { ascending: false });
 
     if (error) {
@@ -122,17 +145,18 @@ export default function TransactionsScreen() {
     setEditingTransactionId(null);
   }
 
-  // Calculates the recommended card and reward gap using reward rules.
   async function calculateRecommendation(
     inputCategory: string,
     inputAmount: number,
     usedCardId: number | null,
+    userId: string,
   ) {
     const normalizedCategory = normalizeCategory(inputCategory);
 
     const { data: rewardRules, error: rewardsError } = await supabase
       .from("card_rewards")
       .select("id, credit_card_id, category, reward_rate")
+      .eq("user_id", userId)
       .ilike("category", normalizedCategory);
 
     if (rewardsError) {
@@ -187,11 +211,20 @@ export default function TransactionsScreen() {
 
     const usedCardId = creditCardId ? Number(creditCardId) : null;
 
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     try {
       const { normalizedCategory, recommendedCard, rewardGap } =
-        await calculateRecommendation(category, amountNumber, usedCardId);
+        await calculateRecommendation(
+          category,
+          amountNumber,
+          usedCardId,
+          userId,
+        );
 
       const { error } = await supabase.from("transactions").insert({
+        user_id: userId,
         merchant_name: merchantName.trim(),
         amount: amountNumber,
         category: normalizedCategory,
@@ -241,9 +274,17 @@ export default function TransactionsScreen() {
 
     const usedCardId = creditCardId ? Number(creditCardId) : null;
 
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     try {
       const { normalizedCategory, recommendedCard, rewardGap } =
-        await calculateRecommendation(category, amountNumber, usedCardId);
+        await calculateRecommendation(
+          category,
+          amountNumber,
+          usedCardId,
+          userId,
+        );
 
       const { error } = await supabase
         .from("transactions")
@@ -256,7 +297,8 @@ export default function TransactionsScreen() {
           recommended_card: recommendedCard,
           reward_gap: rewardGap,
         })
-        .eq("id", editingTransactionId);
+        .eq("id", editingTransactionId)
+        .eq("user_id", userId);
 
       if (error) {
         alert(error.message);
@@ -271,7 +313,14 @@ export default function TransactionsScreen() {
   }
 
   async function deleteTransaction(id: number) {
-    const { error } = await supabase.from("transactions").delete().eq("id", id);
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const { error } = await supabase
+      .from("transactions")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
 
     if (error) {
       alert(error.message);
